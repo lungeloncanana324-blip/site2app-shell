@@ -83,8 +83,9 @@ class MainActivity : AppCompatActivity() {
     private val handler = Handler(Looper.getMainLooper())
 
     /**
-     * The launch screen stays up until the first page has mostly loaded, not
-     * just painted: many sites paint a blank background first.
+     * The launch screen stays up until the first page has finished loading
+     * (or the timeout), not just started painting: many sites paint a blank
+     * background first, and at 80% progress Wikipedia was still white.
      */
     private var launching = true
 
@@ -507,7 +508,6 @@ class MainActivity : AppCompatActivity() {
 
     private inner class ShellChrome : WebChromeClient() {
         override fun onProgressChanged(view: WebView, newProgress: Int) {
-            if (newProgress >= LAUNCH_DONE_PROGRESS) launching = false
             progress.isVisible = newProgress < 100 && !launching && !refresh.isRefreshing && !errorScreen.isVisible
             progress.setProgressCompat(newProgress, true)
         }
@@ -585,9 +585,6 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         const val LAUNCH_TIMEOUT_MS = 8_000L
-
-        /** Load progress at which the page counts as there and the launch screen goes. */
-        const val LAUNCH_DONE_PROGRESS = 80
         val WEB_SCHEMES = setOf("http", "https")
         const val URI_GRANT_FLAGS = Intent.FLAG_GRANT_READ_URI_PERMISSION or
             Intent.FLAG_GRANT_WRITE_URI_PERMISSION or

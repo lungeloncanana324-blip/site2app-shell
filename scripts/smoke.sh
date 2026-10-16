@@ -13,7 +13,9 @@ mkdir -p "$out"
 
 shot() { adb exec-out screencap -p > "$out/$1.png"; echo "photographed $1"; }
 
-launch() { adb shell am start -W -n "$package/app.site2app.shell.MainActivity" > /dev/null; }
+# Without -W: am start -W waits for the app's first frame, which the launch
+# screen holds back, so the picture would always come after it.
+launch() { adb shell am start -n "$package/app.site2app.shell.MainActivity" > /dev/null; }
 
 # Taps the native view whose text is exactly $1. Text inside the WebView is
 # skipped: the page can have its own "Search", and the tab bar is the target.
@@ -48,6 +50,7 @@ adb logcat -c
 adb install -r "$apk"
 
 launch
+sleep 1
 shot 01-launch
 sleep 15
 shot 02-first-page
