@@ -192,10 +192,16 @@ def run(step: dict) -> None:
     elif "texts" in step:
         counter += 1
         labels = []
-        for node, inside_web in nodes(dump()):
-            label = (node.get("text") or node.get("content-desc") or "").strip()
-            if label and centre(node):
-                labels.append(f"{'page' if inside_web else 'app '} {node.get('bounds')} {label[:80]}")
+        # A WebView builds its accessibility tree on the first request, so the
+        # first dump of a page can come back empty.
+        for attempt in range(2):
+            for node, inside_web in nodes(dump()):
+                label = (node.get("text") or node.get("content-desc") or "").strip()
+                if label and centre(node):
+                    labels.append(f"{'page' if inside_web else 'app '} {node.get('bounds')} {label[:80]}")
+            if labels:
+                break
+            time.sleep(2)
         (out / f"{counter:02d}-{step['texts']}.txt").write_text("\n".join(labels) + "\n")
         log(f"saved {len(labels)} labels as {counter:02d}-{step['texts']}")
     elif "foreground" in step:
