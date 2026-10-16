@@ -86,17 +86,27 @@ def nodes(node: ET.Element, inside_web: bool = False):
         yield from nodes(child, inside_web)
 
 
+def box(node: ET.Element) -> tuple[int, int, int, int]:
+    x1, y1, x2, y2 = map(int, re.findall(r"\d+", node.get("bounds", "[0,0][0,0]")))
+    return x1, y1, x2, y2
+
+
 def centre(node: ET.Element) -> tuple[int, int] | None:
     """The middle of a view, or None when it has no area. Android reports page
     elements scrolled out of view as zero-height boxes pinned to the edge."""
-    x1, y1, x2, y2 = map(int, re.findall(r"\d+", node.get("bounds", "[0,0][0,0]")))
+    x1, y1, x2, y2 = box(node)
     if x2 <= x1 or y2 <= y1:
         return None
     return (x1 + x2) // 2, (y1 + y2) // 2
 
 
-def find(root: ET.Element, text: str, native_only: bool, exact: bool, top: float = 0.0, bottom: float = 1.0):
-    """The centre of the first matching view between top and bottom (fractions of the screen height)."""
+def find(root: ET.Element, text: str, native_only: bool, exact: bool):
+    """The centre of the first matching view that can be tapped. Page text counts
+    only inside the WebView's own box, which ends below the status bar and above
+    any tab bar; a fixed share of the screen cut off links just above the edge."""
+    web = next((node for node, _ in nodes(root) if node.get("class") == "android.webkit.WebView"), None)
+    page = box(web) if web is not None else (0, 0, WIDTH, HEIGHT)
+    margin = HEIGHT // 100
     for node, inside_web in nodes(root):
         # The WebView itself is labelled with the page title; only its contents count.
         if (native_only and inside_web) or node.get("class") == "android.webkit.WebView":
@@ -104,7 +114,8 @@ def find(root: ET.Element, text: str, native_only: bool, exact: bool, top: float
         label = node.get("text") or node.get("content-desc") or ""
         if (label == text) if exact else (text.lower() in label.lower()):
             point = centre(node)
-            if point and 0 < point[0] < WIDTH and HEIGHT * top < point[1] < HEIGHT * bottom:
+            left, top, right, bottom = page if inside_web else (0, 0, WIDTH, HEIGHT)
+            if point and left < point[0] < right and top + margin < point[1] < bottom - margin:
                 return point
     return None
 
@@ -143,8 +154,7 @@ def run(step: dict) -> None:
         log(f"tapped tab {step['tab']}")
     elif "tap" in step:
         for attempt in range(int(step.get("scrolls", 0)) + 1):
-            # Page text only where it can be tapped: below the status bar, above the tab bar.
-            point = find(dump(), step["tap"], native_only=False, exact=False, top=0.06, bottom=0.86)
+            point = find(dump(), step["tap"], native_only=False, exact=False)
             if point:
                 tap(point)
                 log(f"tapped {step['tap']!r} after {attempt} scrolls")
