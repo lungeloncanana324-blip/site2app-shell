@@ -15,7 +15,8 @@ shot() { adb exec-out screencap -p > "$out/$1.png"; echo "photographed $1"; }
 
 launch() { adb shell am start -W -n "$package/app.site2app.shell.MainActivity" > /dev/null; }
 
-# Taps the on-screen view whose text is exactly $1.
+# Taps the native view whose text is exactly $1. Text inside the WebView is
+# skipped: the page can have its own "Search", and the tab bar is the target.
 tap_text() {
   adb shell uiautomator dump /sdcard/ui.xml > /dev/null
   adb pull /sdcard/ui.xml "$out/ui.xml" > /dev/null
@@ -24,13 +25,19 @@ tap_text() {
 import re, sys
 import xml.etree.ElementTree as ET
 label, path = sys.argv[1], sys.argv[2]
-for node in ET.parse(path).iter("node"):
-    if node.get("text") == label:
-        x1, y1, x2, y2 = map(int, re.findall(r"\d+", node.get("bounds")))
-        print((x1 + x2) // 2, (y1 + y2) // 2)
-        break
-else:
-    sys.exit(f"nothing on screen says {label!r}")
+
+def native(node, inside_web=False):
+    inside_web = inside_web or node.get("class") == "android.webkit.WebView"
+    if not inside_web and node.get("text") == label:
+        yield node
+    for child in node:
+        yield from native(child, inside_web)
+
+found = next(native(ET.parse(path).getroot()), None)
+if found is None:
+    sys.exit(f"no native view says {label!r}")
+x1, y1, x2, y2 = map(int, re.findall(r"\d+", found.get("bounds")))
+print((x1 + x2) // 2, (y1 + y2) // 2)
 EOF
 )
   # shellcheck disable=SC2086
