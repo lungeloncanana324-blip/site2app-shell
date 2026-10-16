@@ -14,6 +14,7 @@ photographing as it goes. The tour is a JSON list of steps:
   {"offline": true} / {"online": true}   airplane mode on or off
   {"pull": true}                         pull down from the top of the page, to refresh it
   {"scroll": 2}                          scroll down this many screens
+  {"geo": [-29.8587, 31.0218]}           switch location on and put the phone here (latitude, longitude)
   {"texts": "home"}                      save the labels on screen as <out>/<nn>-home.txt, to plan a tour
   {"foreground": "after-link"}           note which app is in front, in tour.log
 
@@ -178,6 +179,12 @@ def run(step: dict) -> None:
         x = str(WIDTH // 2)
         adb("shell", "input", "swipe", x, str(int(HEIGHT * 0.22)), x, str(int(HEIGHT * 0.62)), "700")
         log("pulled to refresh")
+    elif "geo" in step:
+        latitude, longitude = (float(value) for value in step["geo"])
+        adb("shell", "cmd", "location", "set-location-enabled", "true", check=False)
+        # The emulator console takes longitude first.
+        adb("emu", "geo", "fix", str(longitude), str(latitude))
+        log(f"location on, at {latitude}, {longitude}")
     elif "scroll" in step:
         for _ in range(int(step["scroll"])):
             scroll_down()
