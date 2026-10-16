@@ -33,9 +33,11 @@ scripts/apply-config.mjs       Writes the generated files from a config
 scripts/make-tab-icons.mjs     Writes the tab icon drawables and TabIcons.kt from icons/tab-icons.json
 scripts/samples/               site2app.json (the committed sample), wikipedia-tabs.json (the emulator test)
 scripts/smoke.sh               Installs an APK on an emulator and photographs it
+scripts/tour.py                Walks a scripted tour of any build on an emulator (preview.yml)
 .github/workflows/build.yml    One customer build, started by the Site2App site
 .github/workflows/check.yml    Tests, lint and an emulator run on every push
 .github/workflows/cleanup.yml  Deletes build releases after 14 days
+.github/workflows/preview.yml  Runs one build on an emulator (Play Store image, so links can open Chrome) and photographs a tour
 ```
 
 ## Build an app locally

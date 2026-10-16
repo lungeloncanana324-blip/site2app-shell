@@ -1,0 +1,76 @@
+name: Preview
+
+# Runs one build's APK on an Android emulator and photographs a scripted tour
+# (scripts/tour.py says what a tour can do). For seeing a customer's app on a
+# phone before anyone installs it. The pictures are this run's artifact.
+#
+# The emulator is the Play Store image, because it has Chrome: links that
+# leave the app need a browser to land in.
+
+run-name: preview ${{ inputs.build_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_id:
+        description: "The build to run: the part after build- in its release name"
+        required: true
+        type: string
+      tour:
+        description: "The tour, as a JSON list of steps"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  tour:
+    name: Run on an emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BUILD_ID: ${{ inputs.build_id }}
+      TOUR: ${{ inputs.tour }}
+
+    steps:
+      - name: Check the inputs
+        run: |
+          [[ "$BUILD_ID" =~ ^[a-z0-9]{12,40}$ ]] || { echo "::error::build_id must be 12 to 40 lower-case letters and digits"; exit 1; }
+          printf '%s' "$TOUR" | python3 -c "import json, sys; steps = json.load(sys.stdin); assert isinstance(steps, list)"
+
+      - uses: actions/checkout@v5
+
+      - name: Download the build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p apk
+          gh release download "build-$BUILD_ID" --repo "$GITHUB_REPOSITORY" --pattern "*.apk" --dir apk
+          ls -l apk
+
+      # Hardware acceleration for the emulator on GitHub's Linux runners.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Install it and take the tour
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: playstore
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: adb install -r apk/*.apk && python3 scripts/tour.py apk/*.apk "$TOUR" tour
+
+      - name: Upload the pictures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tour
+          path: tour/
+          if-no-files-found: error
