@@ -82,7 +82,10 @@ class MainActivity : AppCompatActivity() {
 
     private val handler = Handler(Looper.getMainLooper())
 
-    /** The launch screen stays up until the first page has painted, or the timeout. */
+    /**
+     * The launch screen stays up until the first page has mostly loaded, not
+     * just painted: many sites paint a blank background first.
+     */
     private var launching = true
 
     /** The main-frame load in flight failed; cleared when a new one starts. */
@@ -99,6 +102,13 @@ class MainActivity : AppCompatActivity() {
 
     /** Injection scripts to run after each load, on WebViews too old for document-start scripts. */
     private var lateScripts: List<String> = emptyList()
+
+    /**
+     * The tab each back-history entry was opened under, so going back to a
+     * page that is no tab's own page (a product opened from Shop) lights its
+     * tab again.
+     */
+    private val tabOfEntry = HashMap<Int, Int>()
 
     private val pickFiles = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val callback = filePathCallback ?: return@registerForActivityResult
@@ -244,8 +254,15 @@ class MainActivity : AppCompatActivity() {
 
     /** Marks the tab whose page is showing, without opening it again. */
     private fun syncTab(url: String) {
-        val index = config.tabs.indexOfFirst { LinkPolicy.samePage(it.url, url) }
-        if (index >= 0) tabs.menu.findItem(index + 1)?.isChecked = true
+        if (config.tabs.isEmpty()) return
+        val entry = web.copyBackForwardList().currentIndex
+        val own = config.tabs.indexOfFirst { LinkPolicy.samePage(it.url, url) }
+        val tab = when {
+            own >= 0 -> own
+            else -> tabOfEntry[entry] ?: (tabs.selectedItemId - 1)
+        }
+        tabOfEntry[entry] = tab
+        tabs.menu.findItem(tab + 1)?.isChecked = true
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -448,11 +465,11 @@ class MainActivity : AppCompatActivity() {
                 errorScreen.isVisible = false
                 failedUrl = null
             }
-            launching = false
             refresh.isRefreshing = false
         }
 
         override fun onPageFinished(view: WebView, url: String) {
+            launching = false
             refresh.isRefreshing = false
             back.isEnabled = customView != null || view.canGoBack()
             val host = LinkPolicy.hostOf(url)
@@ -490,6 +507,7 @@ class MainActivity : AppCompatActivity() {
 
     private inner class ShellChrome : WebChromeClient() {
         override fun onProgressChanged(view: WebView, newProgress: Int) {
+            if (newProgress >= LAUNCH_DONE_PROGRESS) launching = false
             progress.isVisible = newProgress < 100 && !launching && !refresh.isRefreshing && !errorScreen.isVisible
             progress.setProgressCompat(newProgress, true)
         }
@@ -567,6 +585,9 @@ class MainActivity : AppCompatActivity() {
 
     private companion object {
         const val LAUNCH_TIMEOUT_MS = 8_000L
+
+        /** Load progress at which the page counts as there and the launch screen goes. */
+        const val LAUNCH_DONE_PROGRESS = 80
         val WEB_SCHEMES = setOf("http", "https")
         const val URI_GRANT_FLAGS = Intent.FLAG_GRANT_READ_URI_PERMISSION or
             Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
