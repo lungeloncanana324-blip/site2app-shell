@@ -13,6 +13,8 @@ photographing as it goes. The tour is a JSON list of steps:
   {"back": true}                         press back
   {"offline": true} / {"online": true}   airplane mode on or off
   {"pull": true}                         pull down from the top of the page, to refresh it
+  {"scroll": 2}                          scroll down this many screens
+  {"texts": "home"}                      save the labels on screen as <out>/<nn>-home.txt, to plan a tour
   {"foreground": "after-link"}           note which app is in front, in tour.log
 
 Usage: scripts/tour.py <apk> '<tour json>' <out dir>
@@ -132,6 +134,7 @@ def scroll_down() -> None:
 
 
 def run(step: dict) -> None:
+    global counter
     if "launch" in step:
         adb("shell", "am", "start", "-n", activity)
         log("launched")
@@ -175,6 +178,19 @@ def run(step: dict) -> None:
         x = str(WIDTH // 2)
         adb("shell", "input", "swipe", x, str(int(HEIGHT * 0.22)), x, str(int(HEIGHT * 0.62)), "700")
         log("pulled to refresh")
+    elif "scroll" in step:
+        for _ in range(int(step["scroll"])):
+            scroll_down()
+        log(f"scrolled {step['scroll']}")
+    elif "texts" in step:
+        counter += 1
+        labels = []
+        for node, inside_web in nodes(dump()):
+            label = (node.get("text") or node.get("content-desc") or "").strip()
+            if label and centre(node):
+                labels.append(f"{'page' if inside_web else 'app '} {node.get('bounds')} {label[:80]}")
+        (out / f"{counter:02d}-{step['texts']}.txt").write_text("\n".join(labels) + "\n")
+        log(f"saved {len(labels)} labels as {counter:02d}-{step['texts']}")
     elif "foreground" in step:
         activities = adb("shell", "dumpsys", "activity", "activities", check=False)
         front = re.search(r"topResumedActivity=ActivityRecord\{\S+ \S+ (\S+)", activities)
