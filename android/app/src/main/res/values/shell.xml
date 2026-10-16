@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Written by scripts/apply-config.mjs from the app config. Do not edit by hand. -->
+<resources>
+    <string name="app_name" translatable="false" formatted="false">Site2App</string>
+    <color name="shell_theme">#0d0c0b</color>
+    <color name="shell_background">#0d0c0b</color>
+    <color name="shell_splash">#0d0c0b</color>
+    <color name="ic_launcher_background">#0d0c0b</color>
+</resources>

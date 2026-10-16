@@ -1,0 +1,32 @@
+name: Clean up builds
+
+# Test builds are kept for 14 days, as the Site2App site promises. This
+# deletes older build-* releases and their tags once a day.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Delete build releases older than 14 days
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          cutoff=$(date -u -d '14 days ago' +%s)
+          gh release list --repo "$REPO" --limit 1000 --json tagName,createdAt \
+            --jq '.[] | select(.tagName | startswith("build-")) | "\(.tagName) \(.createdAt)"' |
+          while read -r tag created; do
+            if [ "$(date -u -d "$created" +%s)" -lt "$cutoff" ]; then
+              gh release delete "$tag" --repo "$REPO" --yes --cleanup-tag
+              echo "Deleted $tag (created $created)"
+            fi
+          done

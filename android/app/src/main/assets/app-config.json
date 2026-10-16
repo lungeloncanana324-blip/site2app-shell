@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "app": {
+    "name": "Site2App",
+    "launcherName": "Site2App",
+    "startUrl": "https://site2app-iota.vercel.app/",
+    "androidPackage": "app.site2app.sample",
+    "iosBundleId": "app.vercel.site2app-iota",
+    "versionName": "1.0.0"
+  },
+  "branding": {
+    "themeColor": "#0d0c0b",
+    "backgroundColor": "#0d0c0b",
+    "splashBackgroundColor": "#0d0c0b",
+    "statusBarContent": "light",
+    "iconUrl": "https://site2app-iota.vercel.app/icon.svg?icon.3e8gyk6sd1hk-.svg"
+  },
+  "navigation": {
+    "internalHosts": [
+      "site2app-iota.vercel.app",
+      "*.site2app-iota.vercel.app"
+    ],
+    "externalLinks": "in-app-browser",
+    "pullToRefresh": true,
+    "tabs": []
+  },
+  "push": {
+    "enabled": false,
+    "prompt": "after-first-page"
+  },
+  "offline": {
+    "message": "You are offline. Check your connection and try again."
+  },
+  "webview": {
+    "userAgentSuffix": "Site2App/1",
+    "injectCss": "",
+    "injectJs": ""
+  }
+}

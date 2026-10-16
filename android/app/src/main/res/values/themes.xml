@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Light, so the WebView reports prefers-color-scheme: light and the
+         site matches the colours the customer chose for the app. -->
+    <style name="Theme.Shell" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">@color/shell_theme</item>
+        <item name="android:windowBackground">@color/shell_background</item>
+    </style>
+
+    <!-- The launch screen: the launcher icon on the splash colour, until the
+         first page has painted. -->
+    <style name="Theme.Shell.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/shell_splash</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.Shell</item>
+    </style>
+</resources>

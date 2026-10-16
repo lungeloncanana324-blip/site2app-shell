@@ -1,0 +1,16 @@
+{
+  "name": "site2app-shell-scripts",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "apply": "node apply-config.mjs",
+    "icons": "node make-tab-icons.mjs",
+    "test": "node --test \"test/*.test.mjs\""
+  },
+  "dependencies": {
+    "sharp": "0.35.5"
+  }
+}

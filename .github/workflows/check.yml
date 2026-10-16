@@ -1,0 +1,113 @@
+name: Check
+
+# The gate for changes to the shell: the scripts' tests, the app's unit tests
+# and lint, then a real run on an emulator with the smoke-test config (tabs,
+# injected CSS and JS, the offline screen), photographed at every step.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests, lint, sample build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Script tests
+        working-directory: scripts
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+
+      - name: Tab icons match icons/tab-icons.json
+        run: node scripts/make-tab-icons.mjs --check
+
+      - name: Unit tests, lint, release build
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --console=plain :app:testDebugUnitTest :app:lintRelease :app:assembleRelease
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: |
+            android/app/build/reports/
+          if-no-files-found: ignore
+
+  smoke:
+    name: Emulator run
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: scripts/package-lock.json
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Build the smoke-test app
+        run: |
+          (cd scripts && npm ci --no-audit --no-fund)
+          node scripts/apply-config.mjs scripts/samples/wikipedia-tabs.json
+          cd android && chmod +x gradlew && ./gradlew --console=plain :app:assembleRelease
+
+      # Hardware acceleration for the emulator on GitHub's Linux runners.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run it and take pictures
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash scripts/smoke.sh android/app/build/outputs/apk/release/app-release.apk app.site2app.smoke.wikipedia smoke
+
+      - name: Upload the pictures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke
+          path: smoke/
+          if-no-files-found: error

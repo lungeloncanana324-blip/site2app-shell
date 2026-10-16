@@ -1,0 +1,20 @@
+# Build output
+android/build/
+android/app/build/
+android/.gradle/
+android/.kotlin/
+android/local.properties
+*.apk
+*.aab
+
+# Node
+scripts/node_modules/
+
+# The shared test signing key never enters the repository.
+.secrets/
+*.jks
+*.keystore
+
+.idea/
+*.iml
+.DS_Store

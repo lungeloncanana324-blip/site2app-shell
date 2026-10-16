@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "app": {
+    "name": "Wikipedia",
+    "launcherName": "Wikipedia",
+    "startUrl": "https://en.m.wikipedia.org/",
+    "androidPackage": "app.site2app.smoke.wikipedia",
+    "iosBundleId": "org.wikipedia.m.en",
+    "versionName": "1.0.0"
+  },
+  "branding": {
+    "themeColor": "#eaecf0",
+    "backgroundColor": "#ffffff",
+    "splashBackgroundColor": "#ffffff",
+    "statusBarContent": "dark",
+    "iconUrl": "https://en.wikipedia.org/static/apple-touch/wikipedia.png"
+  },
+  "navigation": {
+    "internalHosts": [
+      "wikipedia.org",
+      "*.wikipedia.org"
+    ],
+    "externalLinks": "in-app-browser",
+    "pullToRefresh": true,
+    "tabs": [
+      {
+        "label": "Home",
+        "icon": "home",
+        "url": "https://en.m.wikipedia.org/"
+      },
+      {
+        "label": "Random",
+        "icon": "article",
+        "url": "https://en.m.wikipedia.org/wiki/Special:Random"
+      },
+      {
+        "label": "Search",
+        "icon": "search",
+        "url": "https://en.m.wikipedia.org/wiki/Special:Search"
+      }
+    ]
+  },
+  "push": {
+    "enabled": false,
+    "prompt": "after-first-page"
+  },
+  "offline": {
+    "message": "Wikipedia needs a connection. This screen is the app's own, shown while offline."
+  },
+  "webview": {
+    "userAgentSuffix": "Site2App/1",
+    "injectCss": ".header-container { background: #fde68a !important; }",
+    "injectJs": "document.addEventListener(\"DOMContentLoaded\", function () {\n  var badge = document.createElement(\"div\");\n  badge.textContent = \"Injected script ran\";\n  badge.style.cssText = \"position:fixed;left:8px;bottom:8px;z-index:99999;padding:4px 8px;border-radius:4px;background:#111;color:#fff;font:12px sans-serif\";\n  document.body.appendChild(badge);\n});"
+  }
+}
