@@ -62,6 +62,13 @@ android {
         }
     }
 
+    // Permissions only some apps ask for, such as location, written by
+    // scripts/apply-config.mjs and merged over the main manifest.
+    sourceSets {
+        getByName("debug").manifest.srcFile("src/shell/AndroidManifest.xml")
+        getByName("release").manifest.srcFile("src/shell/AndroidManifest.xml")
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

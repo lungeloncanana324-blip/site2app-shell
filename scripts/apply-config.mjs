@@ -5,6 +5,7 @@
 //   android/shell.properties                         applicationId, versionName, versionCode
 //   android/app/src/main/assets/app-config.json      the config, read by the app at launch
 //   android/app/src/main/res/values/shell.xml        the app name and colours
+//   android/app/src/shell/AndroidManifest.xml        permissions only some apps ask for
 //   android/app/src/main/res/mipmap-*/ic_launcher_foreground.png
 //   android/build/launcher-icon.png                  a 192 px picture of the finished icon
 //
@@ -145,7 +146,36 @@ export function checkConfig(config) {
   );
   check("webview.injectCss", typeof webview.injectCss === "string" && webview.injectCss.length <= 20_000, "text up to 20,000 characters");
   check("webview.injectJs", typeof webview.injectJs === "string" && webview.injectJs.length <= 20_000, "text up to 20,000 characters");
+  // Newer than the rest of the schema: a config saved before it existed has none.
+  check("webview.location", webview.location === undefined || typeof webview.location === "boolean", "true or false");
   return problems;
+}
+
+/**
+ * The manifest merged over the shell's own. Location is declared only for an
+ * app whose site needs it: the permission shows on the store listing, and the
+ * owner has to account for it in Play's data safety form.
+ */
+export function permissionsManifest(config) {
+  const location = config.webview.location === true;
+  const lines = location
+    ? [
+        '    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />',
+        '    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />',
+        "    <!-- Location helps; a phone without GPS can still install the app. -->",
+        '    <uses-feature android:name="android.hardware.location" android:required="false" />',
+        '    <uses-feature android:name="android.hardware.location.gps" android:required="false" />',
+        '    <uses-feature android:name="android.hardware.location.network" android:required="false" />',
+      ]
+    : [];
+  return [
+    '<?xml version="1.0" encoding="utf-8"?>',
+    "<!-- Written by scripts/apply-config.mjs from the app config. Do not edit by hand. -->",
+    '<manifest xmlns:android="http://schemas.android.com/apk/res/android">',
+    ...lines,
+    "</manifest>",
+    "",
+  ].join("\n");
 }
 
 /** Text for an Android string resource: aapt's escapes, then XML's. */
@@ -465,6 +495,8 @@ export async function applyConfig(config, { versionCode = 1, androidDir = path.j
   await writeFile(path.join(main, "assets/app-config.json"), `${JSON.stringify(config, null, 2)}\n`);
   await mkdir(path.join(main, "res/values"), { recursive: true });
   await writeFile(path.join(main, "res/values/shell.xml"), valuesXml(config, plan.background));
+  await mkdir(path.join(androidDir, "app/src/shell"), { recursive: true });
+  await writeFile(path.join(androidDir, "app/src/shell/AndroidManifest.xml"), permissionsManifest(config));
   await writeLauncherIcon(plan, path.join(main, "res"));
   await mkdir(path.join(androidDir, "build"), { recursive: true });
   await writeFile(path.join(androidDir, "build/launcher-icon.png"), await previewIcon(plan));
@@ -474,6 +506,7 @@ export async function applyConfig(config, { versionCode = 1, androidDir = path.j
     label: config.app.launcherName,
     versionName: config.app.versionName,
     versionCode,
+    location: config.webview.location === true,
     icon: { source: plan.source, shape: plan.shape, background: plan.background },
     warnings,
   };

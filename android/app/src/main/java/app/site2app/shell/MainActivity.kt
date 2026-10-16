@@ -1,9 +1,11 @@
 package app.site2app.shell
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -38,6 +40,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.browser.customtabs.CustomTabColorSchemeParams
 import androidx.browser.customtabs.CustomTabsIntent
@@ -55,6 +58,7 @@ import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.navigation.NavigationBarView
 import com.google.android.material.progressindicator.LinearProgressIndicator
 import java.net.URISyntaxException
@@ -105,6 +109,9 @@ class MainActivity : AppCompatActivity() {
     /** Injection scripts to run after each load, on WebViews too old for document-start scripts. */
     private var lateScripts: List<String> = emptyList()
 
+    /** The explanation shown when a sign-in provider refuses the WebView; one at a time. */
+    private var signInDialog: AlertDialog? = null
+
     /**
      * The tab each back-history entry was opened under, so going back to a
      * page that is no tab's own page (a product opened from Shop) lights its
@@ -116,6 +123,16 @@ class MainActivity : AppCompatActivity() {
         val callback = filePathCallback ?: return@registerForActivityResult
         filePathCallback = null
         callback.onReceiveValue(chosenFiles(result.resultCode, result.data))
+    }
+
+    /** A page's location request, waiting for the person's answer to Android's prompt. */
+    private var pendingLocation: Pair<String, GeolocationPermissions.Callback>? = null
+
+    private val askLocation = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { answers ->
+        val (origin, callback) = pendingLocation ?: return@registerForActivityResult
+        pendingLocation = null
+        // Approximate is enough: the page gets whatever the person allowed.
+        callback.invoke(origin, answers.values.any { it }, false)
     }
 
     // Enabled only while there is something to go back to, so that with
@@ -360,9 +377,45 @@ class MainActivity : AppCompatActivity() {
         when (route) {
             Route.Stay, Route.Block -> Unit
             is Route.Load -> web.loadUrl(route.url)
-            is Route.Browser -> openInBrowser(route.url, customTab = config.externalLinks == ShellConfig.ExternalLinks.IN_APP_BROWSER)
+            is Route.Browser ->
+                if (!openInOwnApp(route.url)) {
+                    openInBrowser(route.url, customTab = config.externalLinks == ShellConfig.ExternalLinks.IN_APP_BROWSER)
+                }
             is Route.Handoff -> handOff(route.url)
+            is Route.SignInRefused -> explainSignIn(route.provider)
         }
+    }
+
+    /**
+     * Hands a tapped link to the app that owns it, as Chrome does: YouTube,
+     * the Play Store, WhatsApp's wa.me, Maps. Only an app that is not a
+     * browser counts, so with none installed the link opens in the browser.
+     * Android 10 and older cannot ask that without listing every app, and
+     * always get the browser.
+     */
+    private fun openInOwnApp(url: String): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return false
+        val intent = Intent(Intent.ACTION_VIEW, url.toUri())
+            .addCategory(Intent.CATEGORY_BROWSABLE)
+            .addFlags(Intent.FLAG_ACTIVITY_REQUIRE_NON_BROWSER)
+        return start(intent)
+    }
+
+    /**
+     * Google and Facebook refuse to sign anyone in inside a WebView. Rather
+     * than their error page, say so, and offer the page in the browser, where
+     * the person can sign in. Not the sign-in address itself: the site keeps
+     * the state of a sign-in in cookies that the browser does not have.
+     */
+    private fun explainSignIn(provider: String) {
+        if (signInDialog?.isShowing == true) return
+        val page = web.url?.takeIf { LinkPolicy.schemeOf(it) in WEB_SCHEMES } ?: config.startUrl
+        signInDialog = MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.sign_in_title, provider))
+            .setMessage(getString(R.string.sign_in_message, provider))
+            .setPositiveButton(R.string.sign_in_open_browser) { _, _ -> openInBrowser(page, customTab = false) }
+            .setNegativeButton(R.string.sign_in_not_now, null)
+            .show()
     }
 
     private fun openInBrowser(url: String, customTab: Boolean) {
@@ -537,11 +590,28 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // The app holds no location, camera or microphone permission, so a
-        // page's request for any of them is refused rather than prompted.
+        // Location only when the app config allows it (the build then declares
+        // the permission), only for the customer's own site, and only after
+        // Android has asked the person. Learned from nandos.co.za, whose order
+        // page finds the nearest restaurant. Not remembered here: Android
+        // remembers the answer, and the next request checks it again.
         override fun onGeolocationPermissionsShowPrompt(origin: String, callback: GeolocationPermissions.Callback) {
-            callback.invoke(origin, false, false)
+            val host = LinkPolicy.hostOf(origin)
+            if (!config.location || LinkPolicy.schemeOf(origin) != "https" || host == null || !links.isInternal(host)) {
+                callback.invoke(origin, false, false)
+                return
+            }
+            if (LOCATION_PERMISSIONS.any { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }) {
+                callback.invoke(origin, true, false)
+                return
+            }
+            pendingLocation?.let { (waiting, earlier) -> earlier.invoke(waiting, false, false) }
+            pendingLocation = origin to callback
+            askLocation.launch(LOCATION_PERMISSIONS)
         }
+
+        // The app holds no camera or microphone permission, so a page's
+        // request for either is refused rather than prompted.
 
         override fun onPermissionRequest(request: PermissionRequest) {
             request.deny()
@@ -583,6 +653,7 @@ class MainActivity : AppCompatActivity() {
         handler.removeCallbacksAndMessages(null)
         filePathCallback?.onReceiveValue(null)
         filePathCallback = null
+        signInDialog?.dismiss()
         if (!webGone) {
             (web.parent as? ViewGroup)?.removeView(web)
             web.destroy()
@@ -593,6 +664,7 @@ class MainActivity : AppCompatActivity() {
     private companion object {
         const val LAUNCH_TIMEOUT_MS = 8_000L
         val WEB_SCHEMES = setOf("http", "https")
+        val LOCATION_PERMISSIONS = arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION)
         const val URI_GRANT_FLAGS = Intent.FLAG_GRANT_READ_URI_PERMISSION or
             Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
             Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or

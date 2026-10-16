@@ -25,6 +25,8 @@ data class ShellConfig(
     val userAgentSuffix: String,
     val injectCss: String,
     val injectJs: String,
+    /** The site may ask for the phone's location; Android asks the person first. */
+    val location: Boolean = false,
 ) {
     /** Colour of the clock and battery icons drawn over the theme colour. */
     enum class StatusBarContent { LIGHT, DARK }
@@ -82,6 +84,8 @@ data class ShellConfig(
                 userAgentSuffix = webview.getString("userAgentSuffix"),
                 injectCss = webview.getString("injectCss"),
                 injectJs = webview.getString("injectJs"),
+                // Newer than the rest of the schema, so a config saved before it has none.
+                location = webview.optBoolean("location", false),
             )
         }
 

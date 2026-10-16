@@ -5,4 +5,8 @@
     <string name="retry">Try again</string>
     <string name="page_failed">This page could not be opened.</string>
     <string name="page_insecure">This page could not be opened securely.</string>
+    <string name="sign_in_title">%1$s sign-in needs your browser</string>
+    <string name="sign_in_message">%1$s does not allow signing in inside apps like this one. You can open this page in your browser and sign in there instead.</string>
+    <string name="sign_in_open_browser">Open in browser</string>
+    <string name="sign_in_not_now">Not now</string>
 </resources>

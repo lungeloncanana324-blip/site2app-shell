@@ -82,6 +82,7 @@ describe("checkConfig", () => {
       [(c) => (c.offline.message = ""), "offline.message"],
       [(c) => (c.webview.userAgentSuffix = "App\"; rm -rf"), "webview.userAgentSuffix"],
       [(c) => (c.webview.injectJs = "x".repeat(20_001)), "webview.injectJs"],
+      [(c) => (c.webview.location = "yes"), "webview.location"],
       [(c) => (c.schemaVersion = 2), "schemaVersion"],
     ];
     for (const [mutate, field] of cases) {
@@ -276,6 +277,27 @@ describe("applyConfig", () => {
     }
     const preview = await sharp(path.join(dir, "build/launcher-icon.png")).metadata();
     assert.equal(preview.width, 192);
+
+    // A config from before the location setting declares nothing extra.
+    assert.equal(summary.location, false);
+    const manifest = await readFile(path.join(dir, "app/src/shell/AndroidManifest.xml"), "utf8");
+    assert.doesNotMatch(manifest, /uses-permission/);
+  });
+
+  test("declares location only for an app whose config allows it", async () => {
+    // Learned from nandos.co.za, whose order page finds the nearest restaurant.
+    const config = clone();
+    config.webview.location = true;
+    const summary = await applyConfig(config, { androidDir: dir, fetcher: async () => png() });
+    assert.equal(summary.location, true);
+    const manifest = await readFile(path.join(dir, "app/src/shell/AndroidManifest.xml"), "utf8");
+    assert.match(manifest, /android\.permission\.ACCESS_COARSE_LOCATION/);
+    assert.match(manifest, /android\.permission\.ACCESS_FINE_LOCATION/);
+    assert.match(manifest, /android\.hardware\.location\.gps" android:required="false"/);
+
+    config.webview.location = false;
+    await applyConfig(config, { androidDir: dir, fetcher: async () => png() });
+    assert.doesNotMatch(await readFile(path.join(dir, "app/src/shell/AndroidManifest.xml"), "utf8"), /uses-permission/);
   });
 
   test("warns about an unknown tab icon and push it cannot build", async () => {

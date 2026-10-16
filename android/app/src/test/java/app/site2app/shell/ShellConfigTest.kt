@@ -33,6 +33,15 @@ class ShellConfigTest {
     }
 
     @Test
+    fun locationIsOffUnlessTheConfigAllowsIt() {
+        // The sample predates the setting, as configs saved before it do.
+        assertEquals(false, ShellConfig.parse(sample).location)
+        val json = JSONObject(sample)
+        json.getJSONObject("webview").put("location", true)
+        assertEquals(true, ShellConfig.parse(json.toString()).location)
+    }
+
+    @Test
     fun rejectsAnotherSchemaVersion() {
         val json = JSONObject(sample).put("schemaVersion", 2).toString()
         assertThrows(IllegalArgumentException::class.java) { ShellConfig.parse(json) }
