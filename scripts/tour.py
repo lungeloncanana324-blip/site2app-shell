@@ -16,7 +16,9 @@ photographing as it goes. The tour is a JSON list of steps:
   {"foreground": "after-link"}           note which app is in front, in tour.log
 
 Usage: scripts/tour.py <apk> '<tour json>' <out dir>
-Exits non-zero if a step cannot be done or the app crashes.
+A step that cannot be done is logged, with the screen's text saved beside the
+pictures, and the tour goes on. Exits non-zero if any step failed or the app
+crashed.
 """
 
 import json
@@ -34,7 +36,13 @@ config = json.loads(zipfile.ZipFile(apk).read("assets/app-config.json"))
 package = config["app"]["androidPackage"]
 activity = f"{package}/app.site2app.shell.MainActivity"
 lines: list[str] = []
+failures: list[str] = []
 counter = 0
+last_dump = ""
+
+
+class StepFailed(Exception):
+    pass
 
 
 def log(message: str) -> None:
@@ -65,9 +73,10 @@ def shot(name: str) -> None:
 
 
 def dump() -> ET.Element:
+    global last_dump
     adb("shell", "uiautomator", "dump", "/sdcard/ui.xml")
-    xml = adb("exec-out", "cat", "/sdcard/ui.xml")
-    return ET.fromstring(xml[xml.index("<"):])
+    last_dump = adb("exec-out", "cat", "/sdcard/ui.xml")
+    return ET.fromstring(last_dump[last_dump.index("<"):])
 
 
 def nodes(node: ET.Element, inside_web: bool = False):
@@ -106,7 +115,7 @@ def scroll_down() -> None:
     time.sleep(1.2)
 
 
-for step in tour:
+def run(step: dict) -> None:
     if "launch" in step:
         adb("shell", "am", "start", "-n", activity)
         log("launched")
@@ -124,7 +133,7 @@ for step in tour:
     elif "tab" in step:
         point = find(dump(), step["tab"], native_only=True, exact=True)
         if not point:
-            raise SystemExit(f"No tab says {step['tab']!r}")
+            raise StepFailed(f"No tab says {step['tab']!r}")
         tap(point)
         log(f"tapped tab {step['tab']}")
     elif "tap" in step:
@@ -137,7 +146,7 @@ for step in tour:
                 break
             scroll_down()
         else:
-            raise SystemExit(f"Nothing on screen says {step['tap']!r}")
+            raise StepFailed(f"Nothing on screen says {step['tap']!r}")
     elif "back" in step:
         adb("shell", "input", "keyevent", "KEYCODE_BACK")
         log("pressed back")
@@ -156,14 +165,27 @@ for step in tour:
         front = re.search(r"topResumedActivity=ActivityRecord\{\S+ \S+ (\S+)", activities)
         log(f"in front at {step['foreground']}: {front.group(1) if front else 'unknown'}")
     else:
-        raise SystemExit(f"Unknown step {step}")
+        raise StepFailed(f"Unknown step {step}")
+
+
+for number, step in enumerate(tour, 1):
+    try:
+        run(step)
+    except StepFailed as problem:
+        failures.append(f"step {number} {json.dumps(step)}: {problem}")
+        log(f"FAILED step {number}: {problem}")
+        if last_dump:
+            (out / f"failed-step-{number}.xml").write_text(last_dump)
 
 crashes = adb("logcat", "-d", "-b", "crash", check=False)
 (out / "crash.log").write_text(crashes)
 (out / "logcat.txt").write_text(adb("logcat", "-d", check=False))
-(out / "tour.log").write_text("\n".join(lines) + "\n")
-if package in crashes:
-    log("The app crashed:")
+crashed = package in crashes
+log("The app crashed." if crashed else "No crash.")
+if crashed:
     print(crashes)
+for failure in failures:
+    log(f"Failed: {failure}")
+(out / "tour.log").write_text("\n".join(lines) + "\n")
+if crashed or failures:
     sys.exit(1)
-log("No crash.")
