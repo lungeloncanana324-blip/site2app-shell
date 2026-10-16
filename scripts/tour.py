@@ -86,8 +86,12 @@ def nodes(node: ET.Element, inside_web: bool = False):
         yield from nodes(child, inside_web)
 
 
-def centre(node: ET.Element) -> tuple[int, int]:
+def centre(node: ET.Element) -> tuple[int, int] | None:
+    """The middle of a view, or None when it has no area. Android reports page
+    elements scrolled out of view as zero-height boxes pinned to the edge."""
     x1, y1, x2, y2 = map(int, re.findall(r"\d+", node.get("bounds", "[0,0][0,0]")))
+    if x2 <= x1 or y2 <= y1:
+        return None
     return (x1 + x2) // 2, (y1 + y2) // 2
 
 
@@ -99,9 +103,9 @@ def find(root: ET.Element, text: str, native_only: bool, exact: bool, top: float
             continue
         label = node.get("text") or node.get("content-desc") or ""
         if (label == text) if exact else (text.lower() in label.lower()):
-            x, y = centre(node)
-            if 0 < x < WIDTH and HEIGHT * top < y < HEIGHT * bottom:
-                return x, y
+            point = centre(node)
+            if point and 0 < point[0] < WIDTH and HEIGHT * top < point[1] < HEIGHT * bottom:
+                return point
     return None
 
 
@@ -110,8 +114,9 @@ def tap(point: tuple[int, int]) -> None:
 
 
 def scroll_down() -> None:
+    # Most of a screen per swipe: a dump of a long page takes many seconds.
     x = str(WIDTH // 2)
-    adb("shell", "input", "swipe", x, str(int(HEIGHT * 0.7)), x, str(int(HEIGHT * 0.35)), "400")
+    adb("shell", "input", "swipe", x, str(int(HEIGHT * 0.8)), x, str(int(HEIGHT * 0.15)), "600")
     time.sleep(1.2)
 
 

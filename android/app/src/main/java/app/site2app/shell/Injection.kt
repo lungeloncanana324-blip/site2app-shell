@@ -56,6 +56,79 @@ object Injection {
     }
 
     /**
+     * Hides the site's own bottom tab bar when the app has native tabs, so the
+     * two never stack. It hides only an element pinned to the bottom of the
+     * screen that links to at least two of the app's tab pages: a sticky "Add
+     * to cart" bar or a cookie notice is left alone. It re-checks as the page
+     * renders, because sites draw their navigation late and single-page apps
+     * redraw it. Learned from readmanna.vercel.app, whose own bar sat directly
+     * above the native one.
+     */
+    fun siteTabBarScript(tabs: List<ShellConfig.Tab>): String? {
+        val keys = tabs.mapNotNull { tabKey(it.url) }.distinct()
+        if (keys.size < 2) return null
+        val list = keys.joinToString(", ") { JSONObject.quote(it) }
+        return """
+            (function () {
+              if (window.__site2appTabBar) return;
+              window.__site2appTabBar = true;
+              var keys = {};
+              [$list].forEach(function (key) { keys[key] = true; });
+              function key(href) {
+                try {
+                  var url = new URL(href, location.href);
+                  return url.host.replace(/^www\./, "") + (url.pathname.replace(/\/+${'$'}/, "") || "/");
+                } catch (error) {
+                  return null;
+                }
+              }
+              function pinnedToBottom(element) {
+                var style = getComputedStyle(element);
+                if (style.position !== "fixed" && style.position !== "sticky") return false;
+                var box = element.getBoundingClientRect();
+                return box.height > 0 && box.height < innerHeight * 0.3 && box.width >= innerWidth * 0.6 &&
+                  Math.abs(innerHeight - box.bottom) < 4;
+              }
+              function sweep() {
+                var found = new Map();
+                document.querySelectorAll("a[href]").forEach(function (link) {
+                  var target = key(link.getAttribute("href"));
+                  if (!target || !keys[target]) return;
+                  for (var element = link.parentElement, depth = 0; element && element !== document.body && depth < 8; element = element.parentElement, depth++) {
+                    if (pinnedToBottom(element)) {
+                      var seen = found.get(element) || {};
+                      seen[target] = true;
+                      found.set(element, seen);
+                      break;
+                    }
+                  }
+                });
+                found.forEach(function (seen, element) {
+                  if (Object.keys(seen).length < 2 || element.hasAttribute("data-site2app-hidden")) return;
+                  element.style.setProperty("display", "none", "important");
+                  element.setAttribute("data-site2app-hidden", "tab-bar");
+                });
+              }
+              var pending = null;
+              function soon() {
+                if (pending) return;
+                pending = setTimeout(function () { pending = null; sweep(); }, 120);
+              }
+              if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", soon);
+              else soon();
+              addEventListener("load", soon);
+              new MutationObserver(soon).observe(document, { childList: true, subtree: true });
+            })();
+        """.trimIndent()
+    }
+
+    /** A tab's page as the tab bar script compares it: host without "www." and path without a trailing slash. */
+    fun tabKey(url: String): String? {
+        val host = LinkPolicy.hostOf(url)?.removePrefix("www.") ?: return null
+        return host + LinkPolicy.pathOf(url)
+    }
+
+    /**
      * Origin rules for WebViewCompat.addDocumentStartJavaScript: the internal
      * hosts, over https. A "*.host" pattern also covers the bare host.
      */

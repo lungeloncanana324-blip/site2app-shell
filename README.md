@@ -52,7 +52,17 @@ cd android && ./gradlew :app:assembleRelease
 
 Without the test key the release build is signed with your debug key, so it installs on your own phone. Run `node scripts/apply-config.mjs scripts/samples/site2app.json` afterwards to put the committed sample back.
 
-## How a build runs
+## The build machines (production)
+
+Public builds run on Fly.io, not here: GitHub's terms do not allow a public build service on Actions. `builder/` holds the image: the JDK, the Android SDK, Node and this repository, with Gradle's dependencies and the sample app's build outputs baked in, so a customer build is an offline, incremental Gradle run that changes only resources. The Site2App site creates one machine per build through the Machines API (app `site2app-builder`, region jnb, 2 performance CPUs) with the config and three presigned upload addresses; `builder/run.mjs` builds, uploads the APK, the launcher icon and `result.json` to the site's private Blob store, and the machine destroys itself. The machine holds no storage credentials. Rebuild the image after changing the shell:
+
+```bash
+flyctl deploy . --config builder/fly.toml --dockerfile builder/Dockerfile --build-only --push --image-label v<N> -a site2app-builder
+```
+
+then point the site's `FLY_BUILDER_IMAGE` at the new tag. The test signing key is held in the app's Fly secrets.
+
+## How a build runs here (testing)
 
 The site sends `workflow_dispatch` to `build.yml` with three inputs: a build ID, the config (JSON, gzipped, base64) and a version code. The workflow checks the inputs, applies the config, compiles and signs a release APK, and publishes it with a picture of the launcher icon as the pre-release `build-<id>`. The site polls the run and links to the APK when it is ready.
 

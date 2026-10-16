@@ -7,14 +7,18 @@ name: Preview
 # The emulator is the Play Store image, because it has Chrome: links that
 # leave the app need a browser to land in.
 
-run-name: preview ${{ inputs.build_id }}
+run-name: preview ${{ inputs.build_id || 'from a link' }}
 
 on:
   workflow_dispatch:
     inputs:
       build_id:
-        description: "The build to run: the part after build- in its release name"
-        required: true
+        description: "A GitHub build to run: the part after build- in its release name"
+        required: false
+        type: string
+      apk_url:
+        description: "Or an APK address to download, such as a presigned link to a Fly build"
+        required: false
         type: string
       tour:
         description: "The tour, as a JSON list of steps"
@@ -31,12 +35,17 @@ jobs:
     timeout-minutes: 30
     env:
       BUILD_ID: ${{ inputs.build_id }}
+      APK_URL: ${{ inputs.apk_url }}
       TOUR: ${{ inputs.tour }}
 
     steps:
       - name: Check the inputs
         run: |
-          [[ "$BUILD_ID" =~ ^[a-z0-9]{12,40}$ ]] || { echo "::error::build_id must be 12 to 40 lower-case letters and digits"; exit 1; }
+          if [ -n "$APK_URL" ]; then
+            [[ "$APK_URL" =~ ^https:// ]] || { echo "::error::apk_url must be an https address"; exit 1; }
+          else
+            [[ "$BUILD_ID" =~ ^[a-z0-9]{12,40}$ ]] || { echo "::error::give apk_url, or a build_id of 12 to 40 lower-case letters and digits"; exit 1; }
+          fi
           printf '%s' "$TOUR" | python3 -c "import json, sys; steps = json.load(sys.stdin); assert isinstance(steps, list)"
 
       - uses: actions/checkout@v5
@@ -46,7 +55,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p apk
-          gh release download "build-$BUILD_ID" --repo "$GITHUB_REPOSITORY" --pattern "*.apk" --dir apk
+          if [ -n "$APK_URL" ]; then
+            curl -fsSL --max-time 120 -o apk/app.apk "$APK_URL"
+          else
+            gh release download "build-$BUILD_ID" --repo "$GITHUB_REPOSITORY" --pattern "*.apk" --dir apk
+          fi
           ls -l apk
 
       # Hardware acceleration for the emulator on GitHub's Linux runners.

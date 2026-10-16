@@ -1,0 +1,12 @@
+# Never in the build image: the signing key (it comes from Fly secrets),
+# build output, caches and installed modules.
+.secrets/
+.git/
+android/build/
+android/app/build/
+android/.gradle/
+android/.kotlin/
+android/local.properties
+scripts/node_modules/
+**/*.jks
+**/*.keystore

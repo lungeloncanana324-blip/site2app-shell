@@ -3,6 +3,7 @@ package app.site2app.shell
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Color
@@ -289,7 +290,9 @@ class MainActivity : AppCompatActivity() {
             setAcceptCookie(true)
             setAcceptThirdPartyCookies(web, true)
         }
-        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
+        // From the installed app's flags, not BuildConfig: BuildConfig carries each
+        // customer's package name, which would force a full recompile per build.
+        WebView.setWebContentsDebuggingEnabled(applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0)
         web.webViewClient = ShellClient()
         web.webChromeClient = ShellChrome()
         // Files the site offers for download open in the browser, which has
@@ -305,7 +308,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun installScripts() {
-        val scripts = listOfNotNull(Injection.cssScript(config.injectCss), Injection.jsScript(config.injectJs))
+        val scripts = listOfNotNull(
+            Injection.cssScript(config.injectCss),
+            Injection.jsScript(config.injectJs),
+            Injection.siteTabBarScript(config.tabs),
+        )
         if (scripts.isEmpty()) return
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             try {

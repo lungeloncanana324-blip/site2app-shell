@@ -67,8 +67,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    // No BuildConfig: it would hold each customer's package name and version,
+    // so the compiled code would differ per app and nothing could come from cache.
     buildFeatures {
-        buildConfig = true
+        buildConfig = false
     }
 
     lint {

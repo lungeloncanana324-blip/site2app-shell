@@ -1,0 +1,8 @@
+# The build machines' Fly app. It has no services and no always-on machine:
+# the Site2App site creates one machine per build through the Machines API,
+# and the machine destroys itself when the build ends.
+app = "site2app-builder"
+primary_region = "jnb"
+
+[build]
+  dockerfile = "Dockerfile"
